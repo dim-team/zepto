@@ -1,5 +1,4 @@
-/* Zepto v1.1.6 - zepto event ajax form ie - zeptojs.com/license */
-
+/* Zepto 1.1.2 - zepto event fx data selector - zeptojs.com/license */
 var Zepto = (function() {
   var undefined, key, $, classList, emptyArray = [], slice = emptyArray.slice, filter = emptyArray.filter,
     document = window.document,
@@ -24,6 +23,8 @@ var Zepto = (function() {
       '*': document.createElement('div')
     },
     readyRE = /complete|loaded|interactive/,
+    classSelectorRE = /^\.([\w-]+)$/,
+    idSelectorRE = /^#([\w-]*)$/,
     simpleSelectorRE = /^[\w-]*$/,
     class2type = {},
     toString = class2type.toString,
@@ -43,9 +44,7 @@ var Zepto = (function() {
       'usemap': 'useMap',
       'frameborder': 'frameBorder',
       'contenteditable': 'contentEditable'
-    },
-    isArray = Array.isArray ||
-      function(object){ return object instanceof Array }
+    }
 
   zepto.matches = function(element, selector) {
     if (!selector || !element || element.nodeType !== 1) return false
@@ -72,6 +71,7 @@ var Zepto = (function() {
   function isPlainObject(obj) {
     return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype
   }
+  function isArray(value) { return value instanceof Array }
   function likeArray(obj) { return typeof obj.length == 'number' }
 
   function compact(array) { return filter.call(array, function(item){ return item != null }) }
@@ -266,15 +266,9 @@ var Zepto = (function() {
     return selector == null ? $(nodes) : $(nodes).filter(selector)
   }
 
-  $.contains = document.documentElement.contains ?
-    function(parent, node) {
-      return parent !== node && parent.contains(node)
-    } :
-    function(parent, node) {
-      while (node && (node = node.parentNode))
-        if (node === parent) return true
-      return false
-    }
+  $.contains = function(parent, node) {
+    return parent !== node && parent.contains(node)
+  }
 
   function funcArg(context, arg, idx, payload) {
     return isFunction(arg) ? arg.call(context, idx, payload) : arg
@@ -286,7 +280,7 @@ var Zepto = (function() {
 
   // access className property while respecting SVGAnimatedString
   function className(node, value){
-    var klass = node.className || '',
+    var klass = node.className,
         svg   = klass && klass.baseVal !== undefined
 
     if (value === undefined) return svg ? klass.baseVal : klass
@@ -302,12 +296,13 @@ var Zepto = (function() {
   // JSON    => parse if valid
   // String  => self
   function deserializeValue(value) {
+    var num
     try {
       return value ?
         value == "true" ||
         ( value == "false" ? false :
           value == "null" ? null :
-          +value + "" == value ? +value :
+          !/^0/.test(value) && !isNaN(num = Number(value)) ? num :
           /^[\[\{]/.test(value) ? $.parseJSON(value) :
           value )
         : value
@@ -475,8 +470,7 @@ var Zepto = (function() {
     },
     find: function(selector){
       var result, $this = this
-      if (!selector) result = $()
-      else if (typeof selector == 'object')
+      if (typeof selector == 'object')
         result = $(selector).filter(function(){
           var node = this
           return emptyArray.some.call($this, function(parent){
@@ -588,25 +582,23 @@ var Zepto = (function() {
     prev: function(selector){ return $(this.pluck('previousElementSibling')).filter(selector || '*') },
     next: function(selector){ return $(this.pluck('nextElementSibling')).filter(selector || '*') },
     html: function(html){
-      return 0 in arguments ?
+      return arguments.length === 0 ?
+        (this.length > 0 ? this[0].innerHTML : null) :
         this.each(function(idx){
           var originHtml = this.innerHTML
           $(this).empty().append( funcArg(this, html, idx, originHtml) )
-        }) :
-        (0 in this ? this[0].innerHTML : null)
+        })
     },
     text: function(text){
-      return 0 in arguments ?
-        this.each(function(idx){
-          var newText = funcArg(this, text, idx, this.textContent)
-          this.textContent = newText == null ? '' : ''+newText
-        }) :
-        (0 in this ? this[0].textContent : null)
+      return arguments.length === 0 ?
+        (this.length > 0 ? this[0].textContent : null) :
+        this.each(function(){ this.textContent = (text === undefined) ? '' : ''+text })
     },
     attr: function(name, value){
       var result
-      return (typeof name == 'string' && !(1 in arguments)) ?
-        (!this.length || this[0].nodeType !== 1 ? undefined :
+      return (typeof name == 'string' && value === undefined) ?
+        (this.length == 0 || this[0].nodeType !== 1 ? undefined :
+          (name == 'value' && this[0].nodeName == 'INPUT') ? this.val() :
           (!(result = this[0].getAttribute(name)) && name in this[0]) ? this[0][name] : result
         ) :
         this.each(function(idx){
@@ -616,36 +608,29 @@ var Zepto = (function() {
         })
     },
     removeAttr: function(name){
-      return this.each(function(){ this.nodeType === 1 && name.split(' ').forEach(function(attribute){
-        setAttribute(this, attribute)
-      }, this)})
+      return this.each(function(){ this.nodeType === 1 && setAttribute(this, name) })
     },
     prop: function(name, value){
       name = propMap[name] || name
-      return (1 in arguments) ?
+      return (value === undefined) ?
+        (this[0] && this[0][name]) :
         this.each(function(idx){
           this[name] = funcArg(this, value, idx, this[name])
-        }) :
-        (this[0] && this[0][name])
+        })
     },
     data: function(name, value){
-      var attrName = 'data-' + name.replace(capitalRE, '-$1').toLowerCase()
-
-      var data = (1 in arguments) ?
-        this.attr(attrName, value) :
-        this.attr(attrName)
-
+      var data = this.attr('data-' + name.replace(capitalRE, '-$1').toLowerCase(), value)
       return data !== null ? deserializeValue(data) : undefined
     },
     val: function(value){
-      return 0 in arguments ?
-        this.each(function(idx){
-          this.value = funcArg(this, value, idx, this.value)
-        }) :
+      return arguments.length === 0 ?
         (this[0] && (this[0].multiple ?
            $(this[0]).find('option').filter(function(){ return this.selected }).pluck('value') :
            this[0].value)
-        )
+        ) :
+        this.each(function(idx){
+          this.value = funcArg(this, value, idx, this.value)
+        })
     },
     offset: function(coordinates){
       if (coordinates) return this.each(function(index){
@@ -660,7 +645,7 @@ var Zepto = (function() {
         if ($this.css('position') == 'static') props['position'] = 'relative'
         $this.css(props)
       })
-      if (!this.length) return null
+      if (this.length==0) return null
       var obj = this[0].getBoundingClientRect()
       return {
         left: obj.left + window.pageXOffset,
@@ -671,14 +656,13 @@ var Zepto = (function() {
     },
     css: function(property, value){
       if (arguments.length < 2) {
-        var computedStyle, element = this[0]
+        var element = this[0], computedStyle = getComputedStyle(element, '')
         if(!element) return
-        computedStyle = getComputedStyle(element, '')
         if (typeof property == 'string')
           return element.style[camelize(property)] || computedStyle.getPropertyValue(property)
         else if (isArray(property)) {
           var props = {}
-          $.each(property, function(_, prop){
+          $.each(isArray(property) ? property: [property], function(_, prop){
             props[prop] = (element.style[camelize(prop)] || computedStyle.getPropertyValue(prop))
           })
           return props
@@ -713,7 +697,6 @@ var Zepto = (function() {
     addClass: function(name){
       if (!name) return this
       return this.each(function(idx){
-        if (!('className' in this)) return
         classList = []
         var cls = className(this), newName = funcArg(this, name, idx, cls)
         newName.split(/\s+/g).forEach(function(klass){
@@ -724,7 +707,6 @@ var Zepto = (function() {
     },
     removeClass: function(name){
       return this.each(function(idx){
-        if (!('className' in this)) return
         if (name === undefined) return className(this, '')
         classList = className(this)
         funcArg(this, name, idx, classList).split(/\s+/g).forEach(function(klass){
@@ -817,8 +799,7 @@ var Zepto = (function() {
 
   function traverseNode(node, fun) {
     fun(node)
-    for (var i = 0, len = node.childNodes.length; i < len; i++)
-      traverseNode(node.childNodes[i], fun)
+    for (var key in node.childNodes) traverseNode(node.childNodes[key], fun)
   }
 
   // Generate the `after`, `prepend`, `before`, `append`,
@@ -845,14 +826,11 @@ var Zepto = (function() {
                  operatorIndex == 2 ? target :
                  null
 
-        var parentInDocument = $.contains(document.documentElement, parent)
-
         nodes.forEach(function(node){
           if (copyByClone) node = node.cloneNode(true)
           else if (!parent) return $(node).remove()
 
-          parent.insertBefore(node, target)
-          if (parentInDocument) traverseNode(node, function(el){
+          traverseNode(parent.insertBefore(node, target), function(el){
             if (el.nodeName != null && el.nodeName.toUpperCase() === 'SCRIPT' &&
                (!el.type || el.type === 'text/javascript') && !el.src)
               window['eval'].call(window, el.innerHTML)
@@ -885,7 +863,7 @@ window.Zepto = Zepto
 window.$ === undefined && (window.$ = Zepto)
 
 ;(function($){
-  var _zid = 1, undefined,
+  var $$ = $.zepto.qsa, _zid = 1, undefined,
       slice = Array.prototype.slice,
       isFunction = $.isFunction,
       isString = function(obj){ return typeof obj == 'string' },
@@ -972,18 +950,12 @@ window.$ === undefined && (window.$ = Zepto)
   $.event = { add: add, remove: remove }
 
   $.proxy = function(fn, context) {
-    var args = (2 in arguments) && slice.call(arguments, 2)
     if (isFunction(fn)) {
-      var proxyFn = function(){ return fn.apply(context, args ? args.concat(slice.call(arguments)) : arguments) }
+      var proxyFn = function(){ return fn.apply(context, arguments) }
       proxyFn._zid = zid(fn)
       return proxyFn
     } else if (isString(context)) {
-      if (args) {
-        args.unshift(fn[context], fn)
-        return $.proxy.apply(null, args)
-      } else {
-        return $.proxy(fn[context], fn)
-      }
+      return $.proxy(fn[context], fn)
     } else {
       throw new TypeError("expected function")
     }
@@ -1109,10 +1081,8 @@ window.$ === undefined && (window.$ = Zepto)
     event = (isString(event) || $.isPlainObject(event)) ? $.Event(event) : compatible(event)
     event._args = args
     return this.each(function(){
-      // handle focus(), blur() by calling them directly
-      if (event.type in focus && typeof this[event.type] == "function") this[event.type]()
       // items in the collection might not be DOM elements
-      else if ('dispatchEvent' in this) this.dispatchEvent(event)
+      if('dispatchEvent' in this) this.dispatchEvent(event)
       else $(this).triggerHandler(event, args)
     })
   }
@@ -1134,13 +1104,24 @@ window.$ === undefined && (window.$ = Zepto)
   }
 
   // shortcut methods for `.bind(event, fn)` for each event type
-  ;('focusin focusout focus blur load resize scroll unload click dblclick '+
+  ;('focusin focusout load resize scroll unload click dblclick '+
   'mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave '+
   'change select keydown keypress keyup error').split(' ').forEach(function(event) {
     $.fn[event] = function(callback) {
-      return (0 in arguments) ?
+      return callback ?
         this.bind(event, callback) :
         this.trigger(event)
+    }
+  })
+
+  ;['focus', 'blur'].forEach(function(name) {
+    $.fn[name] = function(callback) {
+      if (callback) this.bind(name, callback)
+      else this.each(function(){
+        try { this[name]() }
+        catch(e) {}
+      })
+      return this
     }
   })
 
@@ -1152,588 +1133,12 @@ window.$ === undefined && (window.$ = Zepto)
     return compatible(event)
   }
 
-})(Zepto);
-
-(function($){
-  var jsonpID = 0,
-      document = window.document,
-      key,
-      name,
-      rscript = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-      scriptTypeRE = /^(?:text|application)\/javascript/i,
-      xmlTypeRE = /^(?:text|application)\/xml/i,
-      jsonType = 'application/json',
-      htmlType = 'text/html',
-      blankRE = /^\s*$/,
-      originAnchor = document.createElement('a')
-
-  originAnchor.href = window.location.href
-
-  // trigger a custom event and return false if it was cancelled
-  function triggerAndReturn(context, eventName, data) {
-    var event = $.Event(eventName)
-    $(context).trigger(event, data)
-    return !event.isDefaultPrevented()
-  }
-
-  // trigger an Ajax "global" event
-  function triggerGlobal(settings, context, eventName, data) {
-    if (settings.global) return triggerAndReturn(context || document, eventName, data)
-  }
-
-  // Number of active Ajax requests
-  $.active = 0
-
-  function ajaxStart(settings) {
-    if (settings.global && $.active++ === 0) triggerGlobal(settings, null, 'ajaxStart')
-  }
-  function ajaxStop(settings) {
-    if (settings.global && !(--$.active)) triggerGlobal(settings, null, 'ajaxStop')
-  }
-
-  // triggers an extra global event "ajaxBeforeSend" that's like "ajaxSend" but cancelable
-  function ajaxBeforeSend(xhr, settings) {
-    var context = settings.context
-    if (settings.beforeSend.call(context, xhr, settings) === false ||
-        triggerGlobal(settings, context, 'ajaxBeforeSend', [xhr, settings]) === false)
-      return false
-
-    triggerGlobal(settings, context, 'ajaxSend', [xhr, settings])
-  }
-  function ajaxSuccess(data, xhr, settings, deferred) {
-    var context = settings.context, status = 'success'
-    settings.success.call(context, data, status, xhr)
-    if (deferred) deferred.resolveWith(context, [data, status, xhr])
-    triggerGlobal(settings, context, 'ajaxSuccess', [xhr, settings, data])
-    ajaxComplete(status, xhr, settings)
-  }
-  // type: "timeout", "error", "abort", "parsererror"
-  function ajaxError(error, type, xhr, settings, deferred) {
-    var context = settings.context
-    settings.error.call(context, xhr, type, error)
-    if (deferred) deferred.rejectWith(context, [xhr, type, error])
-    triggerGlobal(settings, context, 'ajaxError', [xhr, settings, error || type])
-    ajaxComplete(type, xhr, settings)
-  }
-  // status: "success", "notmodified", "error", "timeout", "abort", "parsererror"
-  function ajaxComplete(status, xhr, settings) {
-    var context = settings.context
-    settings.complete.call(context, xhr, status)
-    triggerGlobal(settings, context, 'ajaxComplete', [xhr, settings])
-    ajaxStop(settings)
-  }
-
-  // Empty function, used as default callback
-  function empty() {}
-
-  $.ajaxJSONP = function(options, deferred){
-    if (!('type' in options)) return $.ajax(options)
-
-    var _callbackName = options.jsonpCallback,
-      callbackName = ($.isFunction(_callbackName) ?
-        _callbackName() : _callbackName) || ('jsonp' + (++jsonpID)),
-      script = document.createElement('script'),
-      originalCallback = window[callbackName],
-      responseData,
-      abort = function(errorType) {
-        $(script).triggerHandler('error', errorType || 'abort')
-      },
-      xhr = { abort: abort }, abortTimeout
-
-    if (deferred) deferred.promise(xhr)
-
-    $(script).on('load error', function(e, errorType){
-      clearTimeout(abortTimeout)
-      $(script).off().remove()
-
-      if (e.type == 'error' || !responseData) {
-        ajaxError(null, errorType || 'error', xhr, options, deferred)
-      } else {
-        ajaxSuccess(responseData[0], xhr, options, deferred)
-      }
-
-      window[callbackName] = originalCallback
-      if (responseData && $.isFunction(originalCallback))
-        originalCallback(responseData[0])
-
-      originalCallback = responseData = undefined
-    })
-
-    if (ajaxBeforeSend(xhr, options) === false) {
-      abort('abort')
-      return xhr
-    }
-
-    window[callbackName] = function(){
-      responseData = arguments
-    }
-
-    script.src = options.url.replace(/\?(.+)=\?/, '?$1=' + callbackName)
-    document.head.appendChild(script)
-
-    if (options.timeout > 0) abortTimeout = setTimeout(function(){
-      abort('timeout')
-    }, options.timeout)
-
-    return xhr
-  }
-
-  $.ajaxSettings = {
-    // Default type of request
-    type: 'GET',
-    // Callback that is executed before request
-    beforeSend: empty,
-    // Callback that is executed if the request succeeds
-    success: empty,
-    // Callback that is executed the the server drops error
-    error: empty,
-    // Callback that is executed on request complete (both: error and success)
-    complete: empty,
-    // The context for the callbacks
-    context: null,
-    // Whether to trigger "global" Ajax events
-    global: true,
-    // Transport
-    xhr: function () {
-      return new window.XMLHttpRequest()
-    },
-    // MIME types mapping
-    // IIS returns Javascript as "application/x-javascript"
-    accepts: {
-      script: 'text/javascript, application/javascript, application/x-javascript',
-      json:   jsonType,
-      xml:    'application/xml, text/xml',
-      html:   htmlType,
-      text:   'text/plain'
-    },
-    // Whether the request is to another domain
-    crossDomain: false,
-    // Default timeout
-    timeout: 0,
-    // Whether data should be serialized to string
-    processData: true,
-    // Whether the browser should be allowed to cache GET responses
-    cache: true
-  }
-
-  function mimeToDataType(mime) {
-    if (mime) mime = mime.split(';', 2)[0]
-    return mime && ( mime == htmlType ? 'html' :
-      mime == jsonType ? 'json' :
-      scriptTypeRE.test(mime) ? 'script' :
-      xmlTypeRE.test(mime) && 'xml' ) || 'text'
-  }
-
-  function appendQuery(url, query) {
-    if (query == '') return url
-    return (url + '&' + query).replace(/[&?]{1,2}/, '?')
-  }
-
-  // serialize payload and append it to the URL for GET requests
-  function serializeData(options) {
-    if (options.processData && options.data && $.type(options.data) != "string")
-      options.data = $.param(options.data, options.traditional)
-    if (options.data && (!options.type || options.type.toUpperCase() == 'GET'))
-      options.url = appendQuery(options.url, options.data), options.data = undefined
-  }
-
-  $.ajax = function(options){
-    var settings = $.extend({}, options || {}),
-        deferred = $.Deferred && $.Deferred(),
-        urlAnchor
-    for (key in $.ajaxSettings) if (settings[key] === undefined) settings[key] = $.ajaxSettings[key]
-
-    ajaxStart(settings)
-
-    if (!settings.crossDomain) {
-      urlAnchor = document.createElement('a')
-      urlAnchor.href = settings.url
-      urlAnchor.href = urlAnchor.href
-      settings.crossDomain = (originAnchor.protocol + '//' + originAnchor.host) !== (urlAnchor.protocol + '//' + urlAnchor.host)
-    }
-
-    if (!settings.url) settings.url = window.location.toString()
-    serializeData(settings)
-
-    var dataType = settings.dataType, hasPlaceholder = /\?.+=\?/.test(settings.url)
-    if (hasPlaceholder) dataType = 'jsonp'
-
-    if (settings.cache === false || (
-         (!options || options.cache !== true) &&
-         ('script' == dataType || 'jsonp' == dataType)
-        ))
-      settings.url = appendQuery(settings.url, '_=' + Date.now())
-
-    if ('jsonp' == dataType) {
-      if (!hasPlaceholder)
-        settings.url = appendQuery(settings.url,
-          settings.jsonp ? (settings.jsonp + '=?') : settings.jsonp === false ? '' : 'callback=?')
-      return $.ajaxJSONP(settings, deferred)
-    }
-
-    var mime = settings.accepts[dataType],
-        headers = { },
-        setHeader = function(name, value) { headers[name.toLowerCase()] = [name, value] },
-        protocol = /^([\w-]+:)\/\//.test(settings.url) ? RegExp.$1 : window.location.protocol,
-        xhr = settings.xhr(),
-        nativeSetHeader = xhr.setRequestHeader,
-        abortTimeout
-
-    if (deferred) deferred.promise(xhr)
-
-    if (!settings.crossDomain) setHeader('X-Requested-With', 'XMLHttpRequest')
-    setHeader('Accept', mime || '*/*')
-    if (mime = settings.mimeType || mime) {
-      if (mime.indexOf(',') > -1) mime = mime.split(',', 2)[0]
-      xhr.overrideMimeType && xhr.overrideMimeType(mime)
-    }
-    if (settings.contentType || (settings.contentType !== false && settings.data && settings.type.toUpperCase() != 'GET'))
-      setHeader('Content-Type', settings.contentType || 'application/x-www-form-urlencoded')
-
-    if (settings.headers) for (name in settings.headers) setHeader(name, settings.headers[name])
-    xhr.setRequestHeader = setHeader
-
-    xhr.onreadystatechange = function(){
-      if (xhr.readyState == 4) {
-        xhr.onreadystatechange = empty
-        clearTimeout(abortTimeout)
-        var result, error = false
-        if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304 || (xhr.status == 0 && protocol == 'file:')) {
-          dataType = dataType || mimeToDataType(settings.mimeType || xhr.getResponseHeader('content-type'))
-          result = xhr.responseText
-
-          try {
-            // http://perfectionkills.com/global-eval-what-are-the-options/
-            if (dataType == 'script')    (1,eval)(result)
-            else if (dataType == 'xml')  result = xhr.responseXML
-            else if (dataType == 'json') result = blankRE.test(result) ? null : $.parseJSON(result)
-          } catch (e) { error = e }
-
-          if (error) ajaxError(error, 'parsererror', xhr, settings, deferred)
-          else ajaxSuccess(result, xhr, settings, deferred)
-        } else {
-          ajaxError(xhr.statusText || null, xhr.status ? 'error' : 'abort', xhr, settings, deferred)
-        }
-      }
-    }
-
-    if (ajaxBeforeSend(xhr, settings) === false) {
-      xhr.abort()
-      ajaxError(null, 'abort', xhr, settings, deferred)
-      return xhr
-    }
-
-    if (settings.xhrFields) for (name in settings.xhrFields) xhr[name] = settings.xhrFields[name]
-
-    var async = 'async' in settings ? settings.async : true
-    xhr.open(settings.type, settings.url, async, settings.username, settings.password)
-    xhr.withCredentials = true;
-    for (name in headers) nativeSetHeader.apply(xhr, headers[name])
-
-    if (settings.timeout > 0) abortTimeout = setTimeout(function(){
-        xhr.onreadystatechange = empty
-        xhr.abort()
-        ajaxError(null, 'timeout', xhr, settings, deferred)
-      }, settings.timeout)
-
-    // avoid sending empty string (#319)
-    xhr.send(settings.data ? settings.data : null)
-    return xhr
-  }
-
-  // handle optional data/success arguments
-  function parseArguments(url, data, success, dataType) {
-    if ($.isFunction(data)) dataType = success, success = data, data = undefined
-    if (!$.isFunction(success)) dataType = success, success = undefined
-    return {
-      url: url
-    , data: data
-    , success: success
-    , dataType: dataType
-    , jsonp:'jsonp'
-    }
-  }
-
-  $.get = function(/* url, data, success, dataType */){
-    return $.ajax(parseArguments.apply(null, arguments))
-  }
-
-  $.post = function(/* url, data, success, dataType */){
-    var options = parseArguments.apply(null, arguments)
-    options.type = 'POST'
-    return $.ajax(options)
-  }
-
-  $.getJSON = function(/* url, data, success */){
-    var options = parseArguments.apply(null, arguments)
-    options.dataType = 'json'
-    return $.ajax(options)
-  }
-
-  $.fn.load = function(url, data, success){
-    if (!this.length) return this
-    var self = this, parts = url.split(/\s/), selector,
-        options = parseArguments(url, data, success),
-        callback = options.success
-    if (parts.length > 1) options.url = parts[0], selector = parts[1]
-    options.success = function(response){
-      self.html(selector ?
-        $('<div>').html(response.replace(rscript, "")).find(selector)
-        : response)
-      callback && callback.apply(self, arguments)
-    }
-    $.ajax(options)
-    return this
-  }
-
-  var escape = encodeURIComponent
-
-  function serialize(params, obj, traditional, scope){
-    var type, array = $.isArray(obj), hash = $.isPlainObject(obj)
-    $.each(obj, function(key, value) {
-      type = $.type(value)
-      if (scope) key = traditional ? scope :
-        scope + '[' + (hash || type == 'object' || type == 'array' ? key : '') + ']'
-      // handle data in serializeArray() format
-      if (!scope && array) params.add(value.name, value.value)
-      // recurse into nested objects
-      else if (type == "array" || (!traditional && type == "object"))
-        serialize(params, value, traditional, key)
-      else params.add(key, value)
-    })
-  }
-
-  $.param = function(obj, traditional){
-    var params = []
-    params.add = function(key, value) {
-      if ($.isFunction(value)) value = value()
-      if (value == null) value = ""
-      this.push(escape(key) + '=' + escape(value))
-    }
-    serialize(params, obj, traditional)
-    return params.join('&').replace(/%20/g, '+')
-  }
 })(Zepto)
 
-;(function($){
-  $.fn.serializeArray = function() {
-    var name, type, result = [],
-      add = function(value) {
-        if (value.forEach) return value.forEach(add)
-        result.push({ name: name, value: value })
-      }
-    if (this[0]) $.each(this[0].elements, function(_, field){
-      type = field.type, name = field.name
-      if (name && field.nodeName.toLowerCase() != 'fieldset' &&
-        !field.disabled && type != 'submit' && type != 'reset' && type != 'button' && type != 'file' &&
-        ((type != 'radio' && type != 'checkbox') || field.checked))
-          add($(field).val())
-    })
-    return result
-  }
-
-  $.fn.serialize = function(){
-    var result = []
-    this.serializeArray().forEach(function(elm){
-      result.push(encodeURIComponent(elm.name) + '=' + encodeURIComponent(elm.value))
-    })
-    return result.join('&')
-  }
-
-  $.fn.submit = function(callback) {
-    if (0 in arguments) this.bind('submit', callback)
-    else if (this.length) {
-      var event = $.Event('submit')
-      this.eq(0).trigger(event)
-      if (!event.isDefaultPrevented()) this.get(0).submit()
-    }
-    return this
-  }
-
-})(Zepto);
-
-(function($){
-  // __proto__ doesn't exist on IE<11, so redefine
-  // the Z function to use object extension instead
-  if (!('__proto__' in {})) {
-    $.extend($.zepto, {
-      Z: function(dom, selector){
-        dom = dom || []
-        $.extend(dom, $.fn)
-        dom.selector = selector || ''
-        dom.__Z = true
-        return dom
-      },
-      // this is a kludge but works
-      isZ: function(object){
-        return $.type(object) === 'array' && '__Z' in object
-      }
-    })
-  }
-
-  // getComputedStyle shouldn't freak out when called
-  // without a valid element as argument
-  try {
-    getComputedStyle(undefined)
-  } catch(e) {
-    var nativeGetComputedStyle = getComputedStyle;
-    window.getComputedStyle = function(element){
-      try {
-        return nativeGetComputedStyle(element)
-      } catch(e) {
-        return null
-      }
-    }
-  }
-})(Zepto);
-//     Zepto.js
-//     (c) 2010-2015 Thomas Fuchs
-//     Zepto.js may be freely distributed under the MIT license.
-(function($){
-  var zepto = $.zepto, oldQsa = zepto.qsa, oldMatches = zepto.matches
-
-  function visible(elem){
-    elem = $(elem)
-    return !!(elem.width() || elem.height()) && elem.css("display") !== "none"
-  }
-
-  var filters = $.expr[':'] = {
-    visible:  function(){ if (visible(this)) return this },
-    hidden:   function(){ if (!visible(this)) return this },
-    selected: function(){ if (this.selected) return this },
-    checked:  function(){ if (this.checked) return this },
-    parent:   function(){ return this.parentNode },
-    first:    function(idx){ if (idx === 0) return this },
-    last:     function(idx, nodes){ if (idx === nodes.length - 1) return this },
-    eq:       function(idx, _, value){ if (idx === value) return this },
-    contains: function(idx, _, text){ if ($(this).text().indexOf(text) > -1) return this },
-    has:      function(idx, _, sel){ if (zepto.qsa(this, sel).length) return this }
-  }
-
-  var filterRe = new RegExp('(.*):(\\w+)(?:\\(([^)]+)\\))?$\\s*'),
-      childRe  = /^\s*>/,
-      classTag = 'Zepto' + (+new Date())
-
-  function process(sel, fn) {
-    // quote the hash in `a[href^=#]` expression
-    sel = sel.replace(/=#\]/g, '="#"]')
-    var filter, arg, match = filterRe.exec(sel)
-    if (match && match[2] in filters) {
-      filter = filters[match[2]], arg = match[3]
-      sel = match[1]
-      if (arg) {
-        var num = Number(arg)
-        if (isNaN(num)) arg = arg.replace(/^["']|["']$/g, '')
-        else arg = num
-      }
-    }
-    return fn(sel, filter, arg)
-  }
-
-  zepto.qsa = function(node, selector) {
-    return process(selector, function(sel, filter, arg){
-      try {
-        var taggedParent
-        if (!sel && filter) sel = '*'
-        else if (childRe.test(sel))
-          // support "> *" child queries by tagging the parent node with a
-          // unique class and prepending that classname onto the selector
-          taggedParent = $(node).addClass(classTag), sel = '.'+classTag+' '+sel
-
-        var nodes = oldQsa(node, sel)
-      } catch(e) {
-        console.error('error performing selector: %o', selector)
-        throw e
-      } finally {
-        if (taggedParent) taggedParent.removeClass(classTag)
-      }
-      return !filter ? nodes :
-        zepto.uniq($.map(nodes, function(n, i){ return filter.call(n, i, nodes, arg) }))
-    })
-  }
-
-  zepto.matches = function(node, selector){
-    return process(selector, function(sel, filter, arg){
-      return (!sel || oldMatches(node, sel)) &&
-        (!filter || filter.call(node, null, arg) === node)
-    })
-  }
-})(Zepto);
-
-(function($){
-  function detect(ua, platform){
-    var os = this.os = {}, browser = this.browser = {},
-      webkit = ua.match(/Web[kK]it[\/]{0,1}([\d.]+)/),
-      android = ua.match(/(Android);?[\s\/]+([\d.]+)?/),
-      osx = !!ua.match(/\(Macintosh\; Intel /),
-      ipad = ua.match(/(iPad).*OS\s([\d_]+)/),
-      ipod = ua.match(/(iPod)(.*OS\s([\d_]+))?/),
-      iphone = !ipad && ua.match(/(iPhone\sOS)\s([\d_]+)/),
-      webos = ua.match(/(webOS|hpwOS)[\s\/]([\d.]+)/),
-      win = /Win\d{2}|Windows/.test(platform),
-      wp = ua.match(/Windows Phone ([\d.]+)/),
-      touchpad = webos && ua.match(/TouchPad/),
-      kindle = ua.match(/Kindle\/([\d.]+)/),
-      silk = ua.match(/Silk\/([\d._]+)/),
-      blackberry = ua.match(/(BlackBerry).*Version\/([\d.]+)/),
-      bb10 = ua.match(/(BB10).*Version\/([\d.]+)/),
-      rimtabletos = ua.match(/(RIM\sTablet\sOS)\s([\d.]+)/),
-      playbook = ua.match(/PlayBook/),
-      chrome = ua.match(/Chrome\/([\d.]+)/) || ua.match(/CriOS\/([\d.]+)/),
-      firefox = ua.match(/Firefox\/([\d.]+)/),
-      firefoxos = ua.match(/\((?:Mobile|Tablet); rv:([\d.]+)\).*Firefox\/[\d.]+/),
-      ie = ua.match(/MSIE\s([\d.]+)/) || ua.match(/Trident\/[\d](?=[^\?]+).*rv:([0-9.].)/),
-      webview = !chrome && ua.match(/(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)/),
-      safari = webview || ua.match(/Version\/([\d.]+)([^S](Safari)|[^M]*(Mobile)[^S]*(Safari))/)
-
-    // Todo: clean this up with a better OS/browser seperation:
-    // - discern (more) between multiple browsers on android
-    // - decide if kindle fire in silk mode is android or not
-    // - Firefox on Android doesn't specify the Android version
-    // - possibly devide in os, device and browser hashes
-
-    if (browser.webkit = !!webkit) browser.version = webkit[1]
-
-    if (android) os.android = true, os.version = android[2]
-    if (iphone && !ipod) os.ios = os.iphone = true, os.version = iphone[2].replace(/_/g, '.')
-    if (ipad) os.ios = os.ipad = true, os.version = ipad[2].replace(/_/g, '.')
-    if (ipod) os.ios = os.ipod = true, os.version = ipod[3] ? ipod[3].replace(/_/g, '.') : null
-    if (wp) os.wp = true, os.version = wp[1]
-    if (webos) os.webos = true, os.version = webos[2]
-    if (touchpad) os.touchpad = true
-    if (blackberry) os.blackberry = true, os.version = blackberry[2]
-    if (bb10) os.bb10 = true, os.version = bb10[2]
-    if (rimtabletos) os.rimtabletos = true, os.version = rimtabletos[2]
-    if (playbook) browser.playbook = true
-    if (kindle) os.kindle = true, os.version = kindle[1]
-    if (silk) browser.silk = true, browser.version = silk[1]
-    if (!silk && os.android && ua.match(/Kindle Fire/)) browser.silk = true
-    if (chrome) browser.chrome = true, browser.version = chrome[1]
-    if (firefox) browser.firefox = true, browser.version = firefox[1]
-    if (firefoxos) os.firefoxos = true, os.version = firefoxos[1]
-    if (ie) browser.ie = true, browser.version = ie[1]
-    if (safari && (osx || os.ios || win)) {
-      browser.safari = true
-      if (!os.ios) browser.version = safari[1]
-    }
-    if (webview) browser.webview = true
-
-    os.tablet = !!(ipad || playbook || (android && !ua.match(/Mobile/)) ||
-      (firefox && ua.match(/Tablet/)) || (ie && !ua.match(/Phone/) && ua.match(/Touch/)))
-    os.phone  = !!(!os.tablet && !os.ipod && (android || iphone || webos || blackberry || bb10 ||
-      (chrome && ua.match(/Android/)) || (chrome && ua.match(/CriOS\/([\d.]+)/)) ||
-      (firefox && ua.match(/Mobile/)) || (ie && ua.match(/Touch/))))
-  }
-
-  detect.call($, navigator.userAgent, navigator.platform)
-  // make available to unit tests
-  $.__detect = detect
-
-})(Zepto)
 ;(function($, undefined){
-  var prefix = '', eventPrefix,
+  var prefix = '', eventPrefix, endEventName, endAnimationName,
     vendors = { Webkit: 'webkit', Moz: '', O: 'o' },
-    testEl = document.createElement('div'),
+    document = window.document, testEl = document.createElement('div'),
     supportedTransforms = /^((translate|rotate|scale)(X|Y|Z|3d)?|matrix(3d)?|perspective|skew(X|Y)?)$/i,
     transform,
     transitionProperty, transitionDuration, transitionTiming, transitionDelay,
@@ -1832,7 +1237,7 @@ window.$ === undefined && (window.$ = Zepto)
       setTimeout(function(){
         if (fired) return
         wrappedCallback.call(that)
-      }, ((duration + delay) * 1000) + 25)
+      }, (duration * 1000) + 25)
     }
 
     // trigger page reflow so new elements can animate
@@ -1848,518 +1253,161 @@ window.$ === undefined && (window.$ = Zepto)
   }
 
   testEl = null
-})(Zepto);
-//     Zepto.js
-//     (c) 2010-2015 Thomas Fuchs
-//     Zepto.js may be freely distributed under the MIT license.
+})(Zepto)
 
-(function($, undefined){
-  var document = window.document, docElem = document.documentElement,
-    origShow = $.fn.show, origHide = $.fn.hide, origToggle = $.fn.toggle
-
-  function anim(el, speed, opacity, scale, callback) {
-    if (typeof speed == 'function' && !callback) callback = speed, speed = undefined
-    var props = { opacity: opacity }
-    if (scale) {
-      props.scale = scale
-      el.css($.fx.cssPrefix + 'transform-origin', '0 0')
-    }
-    return el.animate(props, speed, null, callback)
-  }
-
-  function hide(el, speed, scale, callback) {
-    return anim(el, speed, 0, scale, function(){
-      origHide.call($(this))
-      callback && callback.call(this)
-    })
-  }
-
-  $.fn.show = function(speed, callback) {
-    origShow.call(this)
-    if (speed === undefined) speed = 0
-    else this.css('opacity', 0)
-    return anim(this, speed, 1, '1,1', callback)
-  }
-
-  $.fn.hide = function(speed, callback) {
-    if (speed === undefined) return origHide.call(this)
-    else return hide(this, speed, '0,0', callback)
-  }
-
-  $.fn.toggle = function(speed, callback) {
-    if (speed === undefined || typeof speed == 'boolean')
-      return origToggle.call(this, speed)
-    else return this.each(function(){
-      var el = $(this)
-      el[el.css('display') == 'none' ? 'show' : 'hide'](speed, callback)
-    })
-  }
-
-  $.fn.fadeTo = function(speed, opacity, callback) {
-    return anim(this, speed, opacity, null, callback)
-  }
-
-  $.fn.fadeIn = function(speed, callback) {
-    var target = this.css('opacity')
-    if (target > 0) this.css('opacity', 0)
-    else target = 1
-    return origShow.call(this).fadeTo(speed, target, callback)
-  }
-
-  $.fn.fadeOut = function(speed, callback) {
-    return hide(this, speed, null, callback)
-  }
-
-  $.fn.fadeToggle = function(speed, callback) {
-    return this.each(function(){
-      var el = $(this)
-      el[
-        (el.css('opacity') == 0 || el.css('display') == 'none') ? 'fadeIn' : 'fadeOut'
-      ](speed, callback)
-    })
-  }
-
-})(Zepto);
-(function($){
-  var cache = [], timeout
-
-  $.fn.remove = function(){
-    return this.each(function(){
-      if(this.parentNode){
-        if(this.tagName === 'IMG'){
-          cache.push(this)
-          this.src = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
-          if (timeout) clearTimeout(timeout)
-          timeout = setTimeout(function(){ cache = [] }, 60000)
-        }
-        this.parentNode.removeChild(this)
-      }
-    })
-  }
-})(Zepto);
-
-(function($){
-  var slice = Array.prototype.slice
-
-  function Deferred(func) {
-    var tuples = [
-          // action, add listener, listener list, final state
-          [ "resolve", "done", $.Callbacks({once:1, memory:1}), "resolved" ],
-          [ "reject", "fail", $.Callbacks({once:1, memory:1}), "rejected" ],
-          [ "notify", "progress", $.Callbacks({memory:1}) ]
-        ],
-        state = "pending",
-        promise = {
-          state: function() {
-            return state
-          },
-          always: function() {
-            deferred.done(arguments).fail(arguments)
-            return this
-          },
-          then: function(/* fnDone [, fnFailed [, fnProgress]] */) {
-            var fns = arguments
-            return Deferred(function(defer){
-              $.each(tuples, function(i, tuple){
-                var fn = $.isFunction(fns[i]) && fns[i]
-                deferred[tuple[1]](function(){
-                  var returned = fn && fn.apply(this, arguments)
-                  if (returned && $.isFunction(returned.promise)) {
-                    returned.promise()
-                      .done(defer.resolve)
-                      .fail(defer.reject)
-                      .progress(defer.notify)
-                  } else {
-                    var context = this === promise ? defer.promise() : this,
-                        values = fn ? [returned] : arguments
-                    defer[tuple[0] + "With"](context, values)
-                  }
-                })
-              })
-              fns = null
-            }).promise()
-          },
-
-          promise: function(obj) {
-            return obj != null ? $.extend( obj, promise ) : promise
-          }
-        },
-        deferred = {}
-
-    $.each(tuples, function(i, tuple){
-      var list = tuple[2],
-          stateString = tuple[3]
-
-      promise[tuple[1]] = list.add
-
-      if (stateString) {
-        list.add(function(){
-          state = stateString
-        }, tuples[i^1][2].disable, tuples[2][2].lock)
-      }
-
-      deferred[tuple[0]] = function(){
-        deferred[tuple[0] + "With"](this === deferred ? promise : this, arguments)
-        return this
-      }
-      deferred[tuple[0] + "With"] = list.fireWith
-    })
-
-    promise.promise(deferred)
-    if (func) func.call(deferred, deferred)
-    return deferred
-  }
-
-  $.when = function(sub) {
-    var resolveValues = slice.call(arguments),
-        len = resolveValues.length,
-        i = 0,
-        remain = len !== 1 || (sub && $.isFunction(sub.promise)) ? len : 0,
-        deferred = remain === 1 ? sub : Deferred(),
-        progressValues, progressContexts, resolveContexts,
-        updateFn = function(i, ctx, val){
-          return function(value){
-            ctx[i] = this
-            val[i] = arguments.length > 1 ? slice.call(arguments) : value
-            if (val === progressValues) {
-              deferred.notifyWith(ctx, val)
-            } else if (!(--remain)) {
-              deferred.resolveWith(ctx, val)
-            }
-          }
-        }
-
-    if (len > 1) {
-      progressValues = new Array(len)
-      progressContexts = new Array(len)
-      resolveContexts = new Array(len)
-      for ( ; i < len; ++i ) {
-        if (resolveValues[i] && $.isFunction(resolveValues[i].promise)) {
-          resolveValues[i].promise()
-            .done(updateFn(i, resolveContexts, resolveValues))
-            .fail(deferred.reject)
-            .progress(updateFn(i, progressContexts, progressValues))
-        } else {
-          --remain
-        }
-      }
-    }
-    if (!remain) deferred.resolveWith(resolveContexts, resolveValues)
-    return deferred.promise()
-  }
-
-  $.Deferred = Deferred
-})(Zepto);
-(function($){
-  // Create a collection of callbacks to be fired in a sequence, with configurable behaviour
-  // Option flags:
-  //   - once: Callbacks fired at most one time.
-  //   - memory: Remember the most recent context and arguments
-  //   - stopOnFalse: Cease iterating over callback list
-  //   - unique: Permit adding at most one instance of the same callback
-  $.Callbacks = function(options) {
-    options = $.extend({}, options)
-
-    var memory, // Last fire value (for non-forgettable lists)
-        fired,  // Flag to know if list was already fired
-        firing, // Flag to know if list is currently firing
-        firingStart, // First callback to fire (used internally by add and fireWith)
-        firingLength, // End of the loop when firing
-        firingIndex, // Index of currently firing callback (modified by remove if needed)
-        list = [], // Actual callback list
-        stack = !options.once && [], // Stack of fire calls for repeatable lists
-        fire = function(data) {
-          memory = options.memory && data
-          fired = true
-          firingIndex = firingStart || 0
-          firingStart = 0
-          firingLength = list.length
-          firing = true
-          for ( ; list && firingIndex < firingLength ; ++firingIndex ) {
-            if (list[firingIndex].apply(data[0], data[1]) === false && options.stopOnFalse) {
-              memory = false
-              break
-            }
-          }
-          firing = false
-          if (list) {
-            if (stack) stack.length && fire(stack.shift())
-            else if (memory) list.length = 0
-            else Callbacks.disable()
-          }
-        },
-
-        Callbacks = {
-          add: function() {
-            if (list) {
-              var start = list.length,
-                  add = function(args) {
-                    $.each(args, function(_, arg){
-                      if (typeof arg === "function") {
-                        if (!options.unique || !Callbacks.has(arg)) list.push(arg)
-                      }
-                      else if (arg && arg.length && typeof arg !== 'string') add(arg)
-                    })
-                  }
-              add(arguments)
-              if (firing) firingLength = list.length
-              else if (memory) {
-                firingStart = start
-                fire(memory)
-              }
-            }
-            return this
-          },
-          remove: function() {
-            if (list) {
-              $.each(arguments, function(_, arg){
-                var index
-                while ((index = $.inArray(arg, list, index)) > -1) {
-                  list.splice(index, 1)
-                  // Handle firing indexes
-                  if (firing) {
-                    if (index <= firingLength) --firingLength
-                    if (index <= firingIndex) --firingIndex
-                  }
-                }
-              })
-            }
-            return this
-          },
-          has: function(fn) {
-            return !!(list && (fn ? $.inArray(fn, list) > -1 : list.length))
-          },
-          empty: function() {
-            firingLength = list.length = 0
-            return this
-          },
-          disable: function() {
-            list = stack = memory = undefined
-            return this
-          },
-          disabled: function() {
-            return !list
-          },
-          lock: function() {
-            stack = undefined;
-            if (!memory) Callbacks.disable()
-            return this
-          },
-          locked: function() {
-            return !stack
-          },
-          fireWith: function(context, args) {
-            if (list && (!fired || stack)) {
-              args = args || []
-              args = [context, args.slice ? args.slice() : args]
-              if (firing) stack.push(args)
-              else fire(args)
-            }
-            return this
-          },
-          fire: function() {
-            return Callbacks.fireWith(this, arguments)
-          },
-          fired: function() {
-            return !!fired
-          }
-        }
-
-    return Callbacks
-  }
-})(Zepto);
 ;(function($){
-  var touch = {},
-    touchTimeout, tapTimeout, swipeTimeout, longTapTimeout,
-    longTapDelay = 750,
-    gesture
+  var data = {}, dataAttr = $.fn.data, camelize = $.camelCase,
+    exp = $.expando = 'Zepto' + (+new Date()), emptyArray = []
 
-  function swipeDirection(x1, x2, y1, y2) {
-    return Math.abs(x1 - x2) >=
-      Math.abs(y1 - y2) ? (x1 - x2 > 0 ? 'Left' : 'Right') : (y1 - y2 > 0 ? 'Up' : 'Down')
-  }
-
-  function longTap() {
-    longTapTimeout = null
-    if (touch.last) {
-      touch.el.trigger('longTap')
-      touch = {}
-    }
-  }
-
-  function cancelLongTap() {
-    if (longTapTimeout) clearTimeout(longTapTimeout)
-    longTapTimeout = null
-  }
-
-  function cancelAll() {
-    if (touchTimeout) clearTimeout(touchTimeout)
-    if (tapTimeout) clearTimeout(tapTimeout)
-    if (swipeTimeout) clearTimeout(swipeTimeout)
-    if (longTapTimeout) clearTimeout(longTapTimeout)
-    touchTimeout = tapTimeout = swipeTimeout = longTapTimeout = null
-    touch = {}
-  }
-
-  function isPrimaryTouch(event){
-    return (event.pointerType == 'touch' ||
-      event.pointerType == event.MSPOINTER_TYPE_TOUCH)
-      && event.isPrimary
-  }
-
-  function isPointerEventType(e, type){
-    return (e.type == 'pointer'+type ||
-      e.type.toLowerCase() == 'mspointer'+type)
-  }
-
-  $(document).ready(function(){
-    var now, delta, deltaX = 0, deltaY = 0, firstTouch, _isPointerType
-
-    if ('MSGesture' in window) {
-      gesture = new MSGesture()
-      gesture.target = document.body
-    }
-
-    $(document)
-      .bind('MSGestureEnd', function(e){
-        var swipeDirectionFromVelocity =
-          e.velocityX > 1 ? 'Right' : e.velocityX < -1 ? 'Left' : e.velocityY > 1 ? 'Down' : e.velocityY < -1 ? 'Up' : null;
-        if (swipeDirectionFromVelocity) {
-          touch.el.trigger('swipe')
-          touch.el.trigger('swipe'+ swipeDirectionFromVelocity)
-        }
-      })
-      .on('touchstart MSPointerDown pointerdown', function(e){
-        if((_isPointerType = isPointerEventType(e, 'down')) &&
-          !isPrimaryTouch(e)) return
-        firstTouch = _isPointerType ? e : e.touches[0]
-        if (e.touches && e.touches.length === 1 && touch.x2) {
-          // Clear out touch movement data if we have it sticking around
-          // This can occur if touchcancel doesn't fire due to preventDefault, etc.
-          touch.x2 = undefined
-          touch.y2 = undefined
-        }
-        now = Date.now()
-        delta = now - (touch.last || now)
-        touch.el = $('tagName' in firstTouch.target ?
-          firstTouch.target : firstTouch.target.parentNode)
-        touchTimeout && clearTimeout(touchTimeout)
-        touch.x1 = firstTouch.pageX
-        touch.y1 = firstTouch.pageY
-        if (delta > 0 && delta <= 250) touch.isDoubleTap = true
-        touch.last = now
-        longTapTimeout = setTimeout(longTap, longTapDelay)
-        // adds the current touch contact for IE gesture recognition
-        if (gesture && _isPointerType) gesture.addPointer(e.pointerId);
-      })
-      .on('touchmove MSPointerMove pointermove', function(e){
-        if((_isPointerType = isPointerEventType(e, 'move')) &&
-          !isPrimaryTouch(e)) return
-        firstTouch = _isPointerType ? e : e.touches[0]
-        cancelLongTap()
-        touch.x2 = firstTouch.pageX
-        touch.y2 = firstTouch.pageY
-
-        deltaX += Math.abs(touch.x1 - touch.x2)
-        deltaY += Math.abs(touch.y1 - touch.y2)
-      })
-      .on('touchend MSPointerUp pointerup', function(e){
-        if((_isPointerType = isPointerEventType(e, 'up')) &&
-          !isPrimaryTouch(e)) return
-        cancelLongTap()
-
-        // swipe
-        if ((touch.x2 && Math.abs(touch.x1 - touch.x2) > 30) ||
-            (touch.y2 && Math.abs(touch.y1 - touch.y2) > 30))
-
-          swipeTimeout = setTimeout(function() {
-            touch.el.trigger('swipe')
-            touch.el.trigger('swipe' + (swipeDirection(touch.x1, touch.x2, touch.y1, touch.y2)))
-            touch = {}
-          }, 0)
-
-        // normal tap
-        else if ('last' in touch)
-          // don't fire tap when delta position changed by more than 30 pixels,
-          // for instance when moving to a point and back to origin
-          if (deltaX < 30 && deltaY < 30) {
-            // delay by one tick so we can cancel the 'tap' event if 'scroll' fires
-            // ('tap' fires before 'scroll')
-            tapTimeout = setTimeout(function() {
-
-              // trigger universal 'tap' with the option to cancelTouch()
-              // (cancelTouch cancels processing of single vs double taps for faster 'tap' response)
-              var event = $.Event('tap')
-              event.cancelTouch = cancelAll
-              touch.el.trigger(event)
-
-              // trigger double tap immediately
-              if (touch.isDoubleTap) {
-                if (touch.el) touch.el.trigger('doubleTap')
-                touch = {}
-              }
-
-              // trigger single tap after 250ms of inactivity
-              else {
-                touchTimeout = setTimeout(function(){
-                  touchTimeout = null
-                  if (touch.el) touch.el.trigger('singleTap')
-                  touch = {}
-                }, 250)
-              }
-            }, 0)
-          } else {
-            touch = {}
-          }
-          deltaX = deltaY = 0
-
-      })
-      // when the browser window loses focus,
-      // for example when a modal dialog is shown,
-      // cancel all ongoing events
-      .on('touchcancel MSPointerCancel pointercancel', cancelAll)
-
-    // scrolling the window indicates intention of the user
-    // to scroll, not tap or swipe, so cancel all ongoing events
-    $(window).on('scroll', cancelAll)
-  })
-
-  ;['swipe', 'swipeLeft', 'swipeRight', 'swipeUp', 'swipeDown',
-    'doubleTap', 'tap', 'singleTap', 'longTap'].forEach(function(eventName){
-    $.fn[eventName] = function(callback){ return this.on(eventName, callback) }
-  })
-})(Zepto);
-(function(undefined){
-  if (String.prototype.trim === undefined) // fix for iOS 3.2
-    String.prototype.trim = function(){ return this.replace(/^\s+|\s+$/g, '') }
-
-  // For iOS 3.x
-  // from https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Array/reduce
-  if (Array.prototype.reduce === undefined)
-    Array.prototype.reduce = function(fun){
-      if(this === void 0 || this === null) throw new TypeError()
-      var t = Object(this), len = t.length >>> 0, k = 0, accumulator
-      if(typeof fun != 'function') throw new TypeError()
-      if(len == 0 && arguments.length == 1) throw new TypeError()
-
-      if(arguments.length >= 2)
-       accumulator = arguments[1]
-      else
-        do{
-          if(k in t){
-            accumulator = t[k++]
-            break
-          }
-          if(++k >= len) throw new TypeError()
-        } while (true)
-
-      while (k < len){
-        if(k in t) accumulator = fun.call(undefined, accumulator, t[k], k, t)
-        k++
+  // Get value from node:
+  // 1. first try key as given,
+  // 2. then try camelized key,
+  // 3. fall back to reading "data-*" attribute.
+  function getData(node, name) {
+    var id = node[exp], store = id && data[id]
+    if (name === undefined) return store || setData(node)
+    else {
+      if (store) {
+        if (name in store) return store[name]
+        var camelName = camelize(name)
+        if (camelName in store) return store[camelName]
       }
-      return accumulator
+      return dataAttr.call($(node), name)
     }
+  }
 
-})();
+  // Store value under camelized key on node
+  function setData(node, name, value) {
+    var id = node[exp] || (node[exp] = ++$.uuid),
+      store = data[id] || (data[id] = attributeData(node))
+    if (name !== undefined) store[camelize(name)] = value
+    return store
+  }
 
-module.exports = Zepto;
+  // Read all "data-*" attributes from a node
+  function attributeData(node) {
+    var store = {}
+    $.each(node.attributes || emptyArray, function(i, attr){
+      if (attr.name.indexOf('data-') == 0)
+        store[camelize(attr.name.replace('data-', ''))] =
+          $.zepto.deserializeValue(attr.value)
+    })
+    return store
+  }
+
+  $.fn.data = function(name, value) {
+    return value === undefined ?
+      // set multiple values via object
+      $.isPlainObject(name) ?
+        this.each(function(i, node){
+          $.each(name, function(key, value){ setData(node, key, value) })
+        }) :
+        // get value from first element
+        this.length == 0 ? undefined : getData(this[0], name) :
+      // set value on all elements
+      this.each(function(){ setData(this, name, value) })
+  }
+
+  $.fn.removeData = function(names) {
+    if (typeof names == 'string') names = names.split(/\s+/)
+    return this.each(function(){
+      var id = this[exp], store = id && data[id]
+      if (store) $.each(names || store, function(key){
+        delete store[names ? camelize(this) : key]
+      })
+    })
+  }
+
+  // Generate extended `remove` and `empty` functions
+  ;['remove', 'empty'].forEach(function(methodName){
+    var origFn = $.fn[methodName]
+    $.fn[methodName] = function() {
+      var elements = this.find('*')
+      if (methodName === 'remove') elements = elements.add(this)
+      elements.removeData()
+      return origFn.call(this)
+    }
+  })
+})(Zepto)
+
+;(function($){
+  var zepto = $.zepto, oldQsa = zepto.qsa, oldMatches = zepto.matches
+
+  function visible(elem){
+    elem = $(elem)
+    return !!(elem.width() || elem.height()) && elem.css("display") !== "none"
+  }
+
+  // Implements a subset from:
+  // http://api.jquery.com/category/selectors/jquery-selector-extensions/
+  //
+  // Each filter function receives the current index, all nodes in the
+  // considered set, and a value if there were parentheses. The value
+  // of `this` is the node currently being considered. The function returns the
+  // resulting node(s), null, or undefined.
+  //
+  // Complex selectors are not supported:
+  //   li:has(label:contains("foo")) + li:has(label:contains("bar"))
+  //   ul.inner:first > li
+  var filters = $.expr[':'] = {
+    visible:  function(){ if (visible(this)) return this },
+    hidden:   function(){ if (!visible(this)) return this },
+    selected: function(){ if (this.selected) return this },
+    checked:  function(){ if (this.checked) return this },
+    parent:   function(){ return this.parentNode },
+    first:    function(idx){ if (idx === 0) return this },
+    last:     function(idx, nodes){ if (idx === nodes.length - 1) return this },
+    eq:       function(idx, _, value){ if (idx === value) return this },
+    contains: function(idx, _, text){ if ($(this).text().indexOf(text) > -1) return this },
+    has:      function(idx, _, sel){ if (zepto.qsa(this, sel).length) return this }
+  }
+
+  var filterRe = new RegExp('(.*):(\\w+)(?:\\(([^)]+)\\))?$\\s*'),
+      childRe  = /^\s*>/,
+      classTag = 'Zepto' + (+new Date())
+
+  function process(sel, fn) {
+    // quote the hash in `a[href^=#]` expression
+    sel = sel.replace(/=#\]/g, '="#"]')
+    var filter, arg, match = filterRe.exec(sel)
+    if (match && match[2] in filters) {
+      filter = filters[match[2]], arg = match[3]
+      sel = match[1]
+      if (arg) {
+        var num = Number(arg)
+        if (isNaN(num)) arg = arg.replace(/^["']|["']$/g, '')
+        else arg = num
+      }
+    }
+    return fn(sel, filter, arg)
+  }
+
+  zepto.qsa = function(node, selector) {
+    return process(selector, function(sel, filter, arg){
+      try {
+        var taggedParent
+        if (!sel && filter) sel = '*'
+        else if (childRe.test(sel))
+          // support "> *" child queries by tagging the parent node with a
+          // unique class and prepending that classname onto the selector
+          taggedParent = $(node).addClass(classTag), sel = '.'+classTag+' '+sel
+
+        var nodes = oldQsa(node, sel)
+      } catch(e) {
+        console.error('error performing selector: %o', selector)
+        throw e
+      } finally {
+        if (taggedParent) taggedParent.removeClass(classTag)
+      }
+      return !filter ? nodes :
+        zepto.uniq($.map(nodes, function(n, i){ return filter.call(n, i, nodes, arg) }))
+    })
+  }
+
+  zepto.matches = function(node, selector){
+    return process(selector, function(sel, filter, arg){
+      return (!sel || oldMatches(node, sel)) &&
+        (!filter || filter.call(node, null, arg) === node)
+    })
+  }
+})(Zepto)
