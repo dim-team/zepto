@@ -1,0 +1,10 @@
+{
+  "name": "zepto",
+  "repo": "dim-team/zepto",
+  "exports" : "Zepto",
+  "description": "A custom-built zepto - zepto event fx data selector",
+  "version": "1.1.6",
+  "keywords": ["zepto", "selector", "$", "jquery"],
+  "scripts": ["index.js"],
+  "license": "MIT"
+}
